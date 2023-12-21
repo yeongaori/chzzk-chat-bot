@@ -1,0 +1,10 @@
+{
+  "command": "!command1",
+  "reply": "Reply 1",
+  "msgTypeCode": "1"
+},
+{
+  "command": "!command2",
+  "reply": "Reply 2",
+  "msgTypeCode": "1"
+}

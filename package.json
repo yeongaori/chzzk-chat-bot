@@ -1,0 +1,27 @@
+{
+  "name": "chzzk-chat-bot",
+  "version": "1.0.0",
+  "description": "Chat Bot for CHZZK streaming service",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yeongaori/chzzk-chat-bot.git"
+  },
+  "keywords": [
+    "chzzk",
+    "chat-bot",
+    "chzzk-chat-bot"
+  ],
+  "author": "yeongaori",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/yeongaori/chzzk-chat-bot/issues"
+  },
+  "homepage": "https://github.com/yeongaori/chzzk-chat-bot#readme",
+  "dependencies": {
+    "selenium-webdriver": "^4.16.0"
+  }
+}
