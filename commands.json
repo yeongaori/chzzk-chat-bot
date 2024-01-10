@@ -1,10 +1,12 @@
-{
-  "command": "!command1",
-  "reply": "Reply 1",
-  "msgTypeCode": "1"
-},
-{
-  "command": "!command2",
-  "reply": "Reply 2",
-  "msgTypeCode": "1"
-}
+[
+  {
+    "command": "!chatonlycommand",
+    "reply": "Reply for chatonlycommand",
+    "msgTypeCode": "1"
+  },
+  {
+    "command": "!donationonlycommand",
+    "reply": "Reply for donationonlycommand",
+    "msgTypeCode": "10"
+  }
+]
