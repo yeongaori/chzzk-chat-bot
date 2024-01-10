@@ -159,20 +159,19 @@ async function wsReceived(wsData) {
         const msgTypeCode = bdyData.msgTypeCode;
 
         //console.log(wsData);
-        //sendConsole(`${nickname}, ${message}`, 'Message');
+        //sendConsole(`${nickname} (${msgTypeCode}), ${message}`, 'Message');
 
         if (config.saveLog) {
             saveLog(`MESSAGE / ${msgTypeCode} / ${nickname} / ${message}`);
         }
-
-        commandsData.forEach(async (commandsData) => {
-            if (message.startsWith(commandsData.command) && msgTypeCode === commandsData.msgTypeCode) {
-                await sendMessage(commandsData.reply);
+        for (const commandsDataItem of commandsData) {
+            if (message.startsWith(commandsDataItem.command) && msgTypeCode == commandsDataItem.msgTypeCode) {
+                await sendMessage(commandsDataItem.reply);
                 if (config.saveLog) {
-                    saveLog(`COMMAND / ${commandsData.command} / ${commandsData.reply}`)
+                    saveLog(`COMMAND / ${commandsDataItem.command} / ${commandsDataItem.reply}`);
                 }
             }
-        });
+        }
     } catch (e) {
         sendConsole(e, 3);
     }
