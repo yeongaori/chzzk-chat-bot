@@ -1,12 +1,47 @@
 [
   {
-    "command": "!chatonlycommand",
-    "reply": "Reply for chatonlycommand",
+    "command": "!uptime",
+    "reply": "Current uptime: [uptime]",
     "msgTypeCode": "1"
   },
   {
-    "command": "!donationonlycommand",
-    "reply": "Reply for donationonlycommand",
+    "command": "!game",
+    "reply": "[channelName] is playing [liveCategory] ([liveCategoryValue])!",
+    "msgTypeCode": "1"
+  },
+  {
+    "command": "!title",
+    "reply": "Live title: [title]",
+    "msgTypeCode": "1"
+  },
+  {
+    "command": "!follow",
+    "reply": "[nickname] followed [channelName] at [followDate]!",
+    "msgTypeCode": "1"
+  },
+  {
+    "command": "!uptime",
+    "reply": "Current uptime: [uptime]",
+    "msgTypeCode": "1"
+  },
+  {
+    "command": "!viewer",
+    "reply": "Current viewer count: [concurrentUserCount]",
+    "msgTypeCode": "1"
+  },
+  {
+    "command": "!totalviewer",
+    "reply": "Total view count: [accumulateCount]",
+    "msgTypeCode": "1"
+  },
+  {
+    "command": "!allinfo",
+    "reply": "nickname: [nickname] / channelName: [channelName] / message: [message] / title: [title] / uptime: [uptime] / concurrentUserCount: [concurrentUserCount] / accumulateCount: [accumulateCount] / categoryType: [categoryType] / liveCategory: [liveCategory] / liveCategoryValue: [liveCategoryValue] / chatActive: [chatActive] / chatAvailableGroup: [chatAvailableGroup] / paidPromotion: [paidPromotion] / followDate: [followDate]",
+    "msgTypeCode": "1"
+  },
+  {
+    "command": "!donationonly",
+    "reply": "This is donation only command!",
     "msgTypeCode": "10"
   }
 ]
