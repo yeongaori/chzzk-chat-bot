@@ -1,5 +1,6 @@
 {
   "url": "https://chzzk.naver.com/live/channelId",
+  "commandCooldown": 3000,
   "headlessMode": false,
   "saveLog": true
 }
