@@ -1,6 +1,6 @@
-# CHZZK Chat Bot Setup Guide
+# CHZZK Chat Bot
 
-Welcome to the CHZZK Chat Bot setup! Follow these steps to get your chat bot up and running in no time.
+Simple chat bot software running on the Selenium web driver for the CHZZK streaming service
 
 ## Prerequisites
 Make sure you have the following installed before proceeding:
