@@ -12,11 +12,15 @@ let driver;
 let config = {};
 let url = "";
 let channelId = "";
+let sid = "";
+let chatChannelId = "";
+let streamingChannelId = "";
 let commandsData = [];
 let isLoggedIn = false;
 let shouldGetCookie = true;
 let NID_AUT = "";
 let NID_SES = "";
+var ws;
 let reconnectCount = 0;
 
 async function loadConfig() {
@@ -139,13 +143,15 @@ async function sendConsole(text, type) {
 async function handleMessage(data) {
     try {
         data = JSON.parse(data);
-        if (typeof data.ver !== 'undefined' && data.ver == 1) {
+        if (data.cmd == 93101) {
             const bdyData = data.bdy[0];
             const profileData = JSON.parse(bdyData.profile);
+            const extrasData = JSON.parse(bdyData.extras);
             const nickname = profileData.nickname;
             const userId = profileData.userIdHash;
             const message = bdyData.msg;
             const msgTypeCode = bdyData.msgTypeCode;
+            streamingChannelId = extrasData.streamingChannelId;
 
             // Log message details
             // console.log(data);
@@ -182,7 +188,7 @@ async function handleMessage(data) {
                         fetchApi(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/live-detail`),
                         fetchApi(`https://api.chzzk.naver.com/polling/v1/channels/${channelId}/live-status`),
                     ]);
-                    const chatChannelId = await JSON.parse(liveDetailResponse).content.chatChannelId;
+                    chatChannelId = await JSON.parse(liveDetailResponse).content.chatChannelId;
                     const [channelProfileCardResponse, userProfileCardResponse] = await Promise.all([
                         fetchApi(`https://comm-api.game.naver.com/nng_main/v1/chats/${chatChannelId}/users/${channelId}/profile-card?chatType=STREAMING`),
                         fetchApi(`https://comm-api.game.naver.com/nng_main/v1/chats/${chatChannelId}/users/${userId}/profile-card?chatType=STREAMING`)
@@ -212,6 +218,8 @@ async function handleMessage(data) {
                     }
                 }
             }
+        } else if (data.cmd == 10100) {
+            sid = data.bdy.sid;
         }
     } catch (e) {
         sendConsole(`Error: ${e.message}`, 3);
@@ -247,13 +255,27 @@ async function handleMessage(data) {
  */
 async function sendMessage(message) {
     if (isLoggedIn){
-        let textareaElement = await driver.findElement(By.css('[class^="live_chatting_input_input"]'));
-        await driver.wait(until.elementIsVisible(textareaElement));
-        await textareaElement.click();
-        await driver.sleep(50);
-        await driver.actions().sendKeys(message).perform();
-        await driver.sleep(50);
-        await driver.actions().sendKeys(Key.ENTER).perform();
+        const data = JSON.stringify({
+            ver: "2",
+            cmd: 3101,
+            svcid: "game",
+            cid: chatChannelId,
+            sid: sid,
+            retry: false,
+            bdy: {
+                msg: message,
+                msgTypeCode: 1,
+                extras: JSON.stringify({
+                    chatType: 'STREAMING',
+                    osType: 'PC',
+                    streamingChannelId: streamingChannelId,
+                    emojis: ''
+                }),
+                msgTime: Date.now(),
+            },
+            tid: 3
+        })
+        ws.send(data);
     } else {
         sendConsole("User should be logged in to send message", 3)
     }
@@ -353,16 +375,16 @@ function getTimeDifference(timestamp) {
 async function connectWebSocket() {
     await getAuthCookie();
     const liveDetailResponse = await fetchApi(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/live-detail`);
-    const chatChannelId = await JSON.parse(liveDetailResponse).content.chatChannelId;
+    chatChannelId = await JSON.parse(liveDetailResponse).content.chatChannelId;
     const [accessTokenResponse, userStatusResponse] = await Promise.all([
         fetchApi(`https://comm-api.game.naver.com/nng_main/v1/chats/access-token?channelId=${chatChannelId}&chatType=STREAMING`),
         fetchApi(`https://comm-api.game.naver.com/nng_main/v1/user/getUserStatus`)
     ]);
-    let myAccessToken = await JSON.parse(accessTokenResponse).content.accessToken;
+    let accessToken = await JSON.parse(accessTokenResponse).content.accessToken;
     let myUserIdHash = await JSON.parse(userStatusResponse).content.userIdHash;
 
     const serverId = Math.floor(Math.random()*5+1);
-    const ws = new WebSocket(`wss://kr-ss${serverId}.chat.naver.com/chat`);
+    ws = new WebSocket(`wss://kr-ss${serverId}.chat.naver.com/chat`);
 
     ws.onopen = () => {
         sendConsole(`Connected to server ${serverId}`, 1);
@@ -375,7 +397,7 @@ async function connectWebSocket() {
             bdy: {
                 uid: myUserIdHash,
                 devType: 2001,
-                accTkn: myAccessToken,
+                accTkn: accessToken,
                 auth: "SEND",
             },
             tid: 1
