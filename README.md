@@ -1,5 +1,7 @@
 # CHZZK Chat Bot
 
+# DO NOT USE, STILL UNDER DEVELOPMENT
+
 Simple chat bot software running on the Selenium web driver for the CHZZK streaming service
 
 ## Prerequisites
