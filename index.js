@@ -103,11 +103,12 @@ async function checkLoginStatus(url) {
     currentUrl = await driver.getCurrentUrl();
     isLoggedIn = false;
     if (currentUrl == url) {
-        sendConsole('Waiting 3 seconds for website to load', 0);
-        await driver.sleep(3000);
-        isLoggedIn = await driver.executeScript(
-            'var elements=document.querySelectorAll(\'[class^=\"toolbar_item\"]\');for(var i=0; i<elements.length;i++){if(elements[i].textContent.trim()===\'로그인\'){return false;}}return true;'
-        );
+        try {
+            await driver.manage().getCookie('NID_AUT');
+            isLoggedIn = true;
+        } catch (e) {
+            isLoggedIn = false;
+        }
     }
 
     if (isLoggedIn) {
@@ -122,7 +123,7 @@ async function checkLoginStatus(url) {
             currentUrl = 'https://nid.naver.com/nidlogin.login?url=' + url;
             await driver.get('https://nid.naver.com/nidlogin.login?url=' + url);
         }
-        sendConsole('Waiting 5 seconds for website to load', 0);
+        //sendConsole('Waiting 5 seconds for website to load', 0);
         await driver.sleep(5000);
         checkLoginStatus(url);
     }
@@ -192,7 +193,7 @@ async function wsReceived(wsData) {
 
             if (message.startsWith(commandsDataItem.command) && msgTypeCode === commandsDataItem.msgTypeCode) {
                 let replyMessage = commandsDataItem.reply;
-                replyMessage = "nickname: [nickname] / channelName: [channelName] / message: [message] / title: [title] / uptime: [uptime] / concurrentUserCount: [concurrentUserCount] / accumulateCount: [accumulateCount] / categoryType: [categoryType] / liveCategory: [liveCategory] / liveCategoryValue: [liveCategoryValue] / chatActive: [chatActive] / chatAvailableGroup: [chatAvailableGroup] / paidPromotion: [paidPromotion] / followDate: [followDate]\n";
+                //replyMessage = "nickname: [nickname] / channelName: [channelName] / message: [message] / title: [title] / uptime: [uptime] / concurrentUserCount: [concurrentUserCount] / accumulateCount: [accumulateCount] / categoryType: [categoryType] / liveCategory: [liveCategory] / liveCategoryValue: [liveCategoryValue] / chatActive: [chatActive] / chatAvailableGroup: [chatAvailableGroup] / paidPromotion: [paidPromotion] / followDate: [followDate]\n";
 
                 // Fetch necessary data
                 const [liveDetailResponse, liveStatusResponse] = await Promise.all([
@@ -302,10 +303,18 @@ async function injectScriptLoop(url) {
     currentUrl = await driver.getCurrentUrl();
     if (currentUrl === url && shouldInject) {
         shouldInject = false;
-        const webSocketListener = await fs.readFile('./modules/webSocketListener.js', 'utf-8');
+        const webSocketListener = await fs.readFile('./modules/scripts/webSocketListener.js', 'utf-8');
         await driver.executeScript(webSocketListener);
-        NID_AUT = await driver.manage().getCookie('NID_AUT');
-        NID_SES = await driver.manage().getCookie('NID_SES');
+        try {
+            NID_AUT = await driver.manage().getCookie('NID_AUT');
+        } catch (e) {
+            sendConsole(`Failed to get NID_AUT cookie: ${e.message.split('\n')[0]}`, 2)
+        }
+        try {
+            NID_SES = await driver.manage().getCookie('NID_SES');
+        } catch (e) {
+            sendConsole(`Failed to get NID_SES cookie: ${e.message.split('\n')[0]}`, 2)
+        }
         sendConsole('Injected webSocketListener.js', 1);
     } else {
         await driver.sleep(100);
