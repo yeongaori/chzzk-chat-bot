@@ -20,7 +20,7 @@ let isLoggedIn = false;
 let shouldGetCookie = true;
 let NID_AUT = "";
 let NID_SES = "";
-var ws;
+let ws;
 let reconnectCount = 0;
 
 async function loadConfig() {
