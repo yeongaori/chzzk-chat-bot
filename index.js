@@ -1,18 +1,23 @@
-const {Builder, By, Key, until} = require('selenium-webdriver');
+const {Builder, By, Key, until, promise} = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
+const WebSocket = require('isomorphic-ws');
 const fs = require('fs').promises;
 const https = require('https');
+const { readSync } = require('fs');
+const { profile } = require('console');
 
 process.title = 'CHZZK ChatBot';
 
 let driver;
 let config = {};
+let url = "";
 let channelId = "";
 let commandsData = [];
 let isLoggedIn = false;
-let shouldInject = true;
+let shouldGetCookie = true;
 let NID_AUT = "";
 let NID_SES = "";
+let reconnectCount = 0;
 
 async function loadConfig() {
     try {
@@ -50,21 +55,17 @@ async function runBot() {
             "--disable-gpu",
             "window-size=1920x1080",
             "lang=ko_KR",
-            "--host-resolver-rules=MAP livecloud.pstatic.net 127.0.0.1, MAP livecloud.akamaized.net 127.0.0.1",
             "console",
             "--log-level=3"
         )
-
-        if (config.headlessMode) {
-            options.headless();
-        }
+        .excludeSwitches("enable-logging")
 
         driver = await new Builder()
             .forBrowser('chrome')
             .setChromeOptions(options)
             .build();
 
-        const url = config.url;
+        url = config.url;
         await driver.get(url);
 
         channelId = url.split('chzzk.naver.com/live/')[1]?.split('/')[0];
@@ -73,32 +74,13 @@ async function runBot() {
         } else {
             sendConsole('Error getting channelId, wrong URL?', 3);
         }
-
-        (async () => {
-            while (true) {
-                await injectScriptLoop(url);
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-        })();
-        await checkLoginStatus(url);
-
-        setInterval(async () => {
-            const browserSavedData = await driver.executeScript('return window.savedWebSocketData;');
-            if (browserSavedData) {
-                savedWebSocketData = browserSavedData;
-                const wsData = JSON.parse(savedWebSocketData);
-                if (wsData.ver == 1) {
-                    wsReceived(wsData);
-                }
-                await driver.executeScript('window.savedWebSocketData = "";');
-            }
-        }, 100);
+        await checkLoginStatus();
     } catch (e) {
         sendConsole(e, 3);
     }
 }
 
-async function checkLoginStatus(url) {
+async function checkLoginStatus() {
     let currentUrl = '';
     currentUrl = await driver.getCurrentUrl();
     isLoggedIn = false;
@@ -113,19 +95,17 @@ async function checkLoginStatus(url) {
 
     if (isLoggedIn) {
         sendConsole('User logged in', 1);
+        connectWebSocket();
         return;
     } else {
         if (currentUrl == url) {
-            sendConsole('User not logged in, please log in', 0);
-            if (config.headlessMode) {
-                sendConsole('Please disable headlessMode in config.json to log in', 2);
-            }
+            sendConsole('User not logged in, please log in', 2);
             currentUrl = 'https://nid.naver.com/nidlogin.login?url=' + url;
             await driver.get('https://nid.naver.com/nidlogin.login?url=' + url);
         }
         //sendConsole('Waiting 5 seconds for website to load', 0);
-        await driver.sleep(5000);
-        checkLoginStatus(url);
+        await driver.sleep(500);
+        checkLoginStatus();
     }
 }
 
@@ -156,81 +136,85 @@ async function sendConsole(text, type) {
     console.log(text);
 }
 
-async function wsReceived(wsData) {
+async function handleMessage(data) {
     try {
-        const bdyData = wsData.bdy[0];
-        const profileData = JSON.parse(bdyData.profile);
-        const nickname = profileData.nickname;
-        const userId = profileData.userIdHash;
-        const message = bdyData.msg;
-        const msgTypeCode = bdyData.msgTypeCode;
+        data = JSON.parse(data);
+        if (typeof data.ver !== 'undefined' && data.ver == 1) {
+            const bdyData = data.bdy[0];
+            const profileData = JSON.parse(bdyData.profile);
+            const nickname = profileData.nickname;
+            const userId = profileData.userIdHash;
+            const message = bdyData.msg;
+            const msgTypeCode = bdyData.msgTypeCode;
 
-        // Log message details
-        // console.log(wsData);
-        // sendConsole(`${nickname} (${msgTypeCode}), ${message}`, 'Message');
+            // Log message details
+            // console.log(data);
+            // sendConsole(`${nickname} (${msgTypeCode}), ${message}`, 'Message');
 
-        if (config.saveLog) {
-            saveLog(`MESSAGE / ${msgTypeCode} / ${nickname} / ${message}`);
-        }
-
-        const cooldowns = new Map();
-
-        for (const commandsDataItem of commandsData) {
-            const commandKey = `${message}_${commandsDataItem.command}_${msgTypeCode}`;
-
-            if (cooldowns.has(commandKey)) {
-                const lastExecutionTime = cooldowns.get(commandKey);
-                const currentTime = Date.now();
-                const cooldownDuration = config.commandCooldown;
-
-                if (currentTime - lastExecutionTime < cooldownDuration) {
-                    // Command is on cooldown, skip
-                    continue;
-                }
+            if (config.saveLog) {
+                saveLog(`MESSAGE / ${msgTypeCode} / ${nickname} / ${message}`);
             }
 
-            cooldowns.set(commandKey, Date.now());
+            const cooldowns = new Map();
 
-            if (message.startsWith(commandsDataItem.command) && msgTypeCode === commandsDataItem.msgTypeCode) {
-                let replyMessage = commandsDataItem.reply;
-                //replyMessage = "nickname: [nickname] / channelName: [channelName] / message: [message] / title: [title] / uptime: [uptime] / concurrentUserCount: [concurrentUserCount] / accumulateCount: [accumulateCount] / categoryType: [categoryType] / liveCategory: [liveCategory] / liveCategoryValue: [liveCategoryValue] / chatActive: [chatActive] / chatAvailableGroup: [chatAvailableGroup] / paidPromotion: [paidPromotion] / followDate: [followDate]\n";
+            for (const commandsDataItem of commandsData) {
+                const commandKey = `${message}_${commandsDataItem.command}_${msgTypeCode}`;
 
-                // Fetch necessary data
-                const [liveDetailResponse, liveStatusResponse] = await Promise.all([
-                    fetchApi(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/live-detail`),
-                    fetchApi(`https://api.chzzk.naver.com/polling/v1/channels/${channelId}/live-status`),
-                ]);
-                const chatChannelId = await JSON.parse(liveDetailResponse).content.chatChannelId;
-                const [channelProfileCardResponse, userProfileCardResponse] = await Promise.all([
-                    fetchApi(`https://comm-api.game.naver.com/nng_main/v1/chats/${chatChannelId}/users/${channelId}/profile-card?chatType=STREAMING`),
-                    fetchApi(`https://comm-api.game.naver.com/nng_main/v1/chats/${chatChannelId}/users/${userId}/profile-card?chatType=STREAMING`)
-                ]);
+                if (cooldowns.has(commandKey)) {
+                    const lastExecutionTime = cooldowns.get(commandKey);
+                    const currentTime = Date.now();
+                    const cooldownDuration = config.commandCooldown;
 
-                replyMessage = replyMessage.replace("[nickname]", nickname);
-                replyMessage = replyMessage.replace("[channelName]", JSON.parse(channelProfileCardResponse).content.nickname);
-                replyMessage = replyMessage.replace("[message]", message);
-                replyMessage = replyMessage.replace("[title]", JSON.parse(liveStatusResponse).content.liveTitle);
-                replyMessage = replyMessage.replace("[uptime]", calculateUptime(JSON.parse(liveDetailResponse).content.livePlaybackJson));
-                replyMessage = replyMessage.replace("[concurrentUserCount]", JSON.parse(liveStatusResponse).content.concurrentUserCount);
-                replyMessage = replyMessage.replace("[accumulateCount]", JSON.parse(liveStatusResponse).content.accumulateCount);
-                replyMessage = replyMessage.replace("[categoryType]", JSON.parse(liveStatusResponse).content.categoryType);
-                replyMessage = replyMessage.replace("[liveCategory]", JSON.parse(liveStatusResponse).content.liveCategory);
-                replyMessage = replyMessage.replace("[liveCategoryValue]", JSON.parse(liveStatusResponse).content.liveCategoryValue);
-                replyMessage = replyMessage.replace("[chatActive]", JSON.parse(liveDetailResponse).content.chatActive);
-                replyMessage = replyMessage.replace("[chatAvailableGroup]", JSON.parse(liveDetailResponse).content.chatAvailableGroup);
-                replyMessage = replyMessage.replace("[paidPromotion]", JSON.parse(liveDetailResponse).content.paidPromotion);
-                replyMessage = replyMessage.replace("[followDate]", getFollowDate(userProfileCardResponse));
+                    if (currentTime - lastExecutionTime < cooldownDuration) {
+                        // Command is on cooldown, skip
+                        continue;
+                    }
+                }
 
-                // Send the modified replyMessage
-                await sendMessage(replyMessage);
+                cooldowns.set(commandKey, Date.now());
 
-                if (config.saveLog) {
-                    saveLog(`COMMAND / ${commandsDataItem.command} / ${commandsDataItem.reply}`);
+                if (message.startsWith(commandsDataItem.command) && msgTypeCode === commandsDataItem.msgTypeCode) {
+                    let replyMessage = commandsDataItem.reply;
+                    //replyMessage = "nickname: [nickname] / channelName: [channelName] / message: [message] / title: [title] / uptime: [uptime] / concurrentUserCount: [concurrentUserCount] / accumulateCount: [accumulateCount] / categoryType: [categoryType] / liveCategory: [liveCategory] / liveCategoryValue: [liveCategoryValue] / chatActive: [chatActive] / chatAvailableGroup: [chatAvailableGroup] / paidPromotion: [paidPromotion] / followDate: [followDate]\n";
+
+                    // Fetch necessary data
+                    const [liveDetailResponse, liveStatusResponse] = await Promise.all([
+                        fetchApi(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/live-detail`),
+                        fetchApi(`https://api.chzzk.naver.com/polling/v1/channels/${channelId}/live-status`),
+                    ]);
+                    const chatChannelId = await JSON.parse(liveDetailResponse).content.chatChannelId;
+                    const [channelProfileCardResponse, userProfileCardResponse] = await Promise.all([
+                        fetchApi(`https://comm-api.game.naver.com/nng_main/v1/chats/${chatChannelId}/users/${channelId}/profile-card?chatType=STREAMING`),
+                        fetchApi(`https://comm-api.game.naver.com/nng_main/v1/chats/${chatChannelId}/users/${userId}/profile-card?chatType=STREAMING`)
+                    ]);
+
+                    replyMessage = replyMessage.replace("[nickname]", nickname);
+                    replyMessage = replyMessage.replace("[channelName]", JSON.parse(channelProfileCardResponse).content.nickname);
+                    replyMessage = replyMessage.replace("[message]", message);
+                    replyMessage = replyMessage.replace("[title]", JSON.parse(liveStatusResponse).content.liveTitle);
+                    replyMessage = replyMessage.replace("[uptime]", calculateUptime(JSON.parse(liveDetailResponse).content.livePlaybackJson));
+                    replyMessage = replyMessage.replace("[concurrentUserCount]", JSON.parse(liveStatusResponse).content.concurrentUserCount);
+                    replyMessage = replyMessage.replace("[accumulateCount]", JSON.parse(liveStatusResponse).content.accumulateCount);
+                    replyMessage = replyMessage.replace("[categoryType]", JSON.parse(liveStatusResponse).content.categoryType);
+                    replyMessage = replyMessage.replace("[liveCategory]", JSON.parse(liveStatusResponse).content.liveCategory);
+                    replyMessage = replyMessage.replace("[liveCategoryValue]", JSON.parse(liveStatusResponse).content.liveCategoryValue);
+                    replyMessage = replyMessage.replace("[chatActive]", JSON.parse(liveDetailResponse).content.chatActive);
+                    replyMessage = replyMessage.replace("[chatAvailableGroup]", JSON.parse(liveDetailResponse).content.chatAvailableGroup);
+                    replyMessage = replyMessage.replace("[paidPromotion]", JSON.parse(liveDetailResponse).content.paidPromotion);
+                    replyMessage = replyMessage.replace("[followDate]", getFollowDate(userProfileCardResponse));
+
+                    // Send the modified replyMessage
+                    await sendMessage(replyMessage);
+                    //sendConsole(replyMessage, 'Reply');
+
+                    if (config.saveLog) {
+                        saveLog(`COMMAND / ${commandsDataItem.command} / ${commandsDataItem.reply}`);
+                    }
                 }
             }
         }
-    } catch (error) {
-        sendConsole(`Error: ${error.message}`, 3);
+    } catch (e) {
+        sendConsole(`Error: ${e.message}`, 3);
     }
 
 
@@ -297,43 +281,43 @@ async function saveLog(data) {
     });
 }
 
-async function injectScriptLoop(url) {
+async function getAuthCookie() {
     let currentUrl = '';
 
     currentUrl = await driver.getCurrentUrl();
-    if (currentUrl === url && shouldInject) {
-        shouldInject = false;
-        const webSocketListener = await fs.readFile('./modules/webSocketListener.js', 'utf-8');
-        await driver.executeScript(webSocketListener);
+    if (currentUrl === url && shouldGetCookie && isLoggedIn) {
+        shouldGetCookie = false;
+
         try {
             NID_AUT = await driver.manage().getCookie('NID_AUT');
+            NID_AUT = NID_AUT.value;
         } catch (e) {
             sendConsole(`Failed to get NID_AUT cookie: ${e.message.split('\n')[0]}`, 2)
         }
         try {
             NID_SES = await driver.manage().getCookie('NID_SES');
+            NID_SES = NID_SES.value;
         } catch (e) {
             sendConsole(`Failed to get NID_SES cookie: ${e.message.split('\n')[0]}`, 2)
         }
-        sendConsole('Injected webSocketListener.js', 1);
     } else {
         await driver.sleep(100);
     }
 
     if (currentUrl != url) {
-        shouldInject = true;
+        shouldGetCookie = true;
     }
 }
 
-function fetchApi(url) {
+function fetchApi(apiUrl) {
     return new Promise((resolve, reject) => {
       const options = {
         headers: {
-          'Cookie': `NID_AUT=${NID_AUT.value}; NID_SES=${NID_SES.value};`
+          'Cookie': `NID_AUT=${NID_AUT}; NID_SES=${NID_SES};`
         }
       };
   
-      https.get(url, options, (response) => {
+      https.get(apiUrl, options, (response) => {
         let data = '';
   
         // A chunk of data has been received
@@ -349,7 +333,7 @@ function fetchApi(url) {
         reject(error);
       });
     });
-  }
+}
 
 function getTimeDifference(timestamp) {
     const inputDate = new Date(timestamp);
@@ -364,6 +348,63 @@ function getTimeDifference(timestamp) {
     const formattedTime = `${hours} hours ${minutes} minutes ${seconds} seconds`;
 
     return formattedTime;
+}
+
+async function connectWebSocket() {
+    await getAuthCookie();
+    const liveDetailResponse = await fetchApi(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/live-detail`);
+    const chatChannelId = await JSON.parse(liveDetailResponse).content.chatChannelId;
+    const [accessTokenResponse, userStatusResponse] = await Promise.all([
+        fetchApi(`https://comm-api.game.naver.com/nng_main/v1/chats/access-token?channelId=${chatChannelId}&chatType=STREAMING`),
+        fetchApi(`https://comm-api.game.naver.com/nng_main/v1/user/getUserStatus`)
+    ]);
+    let myAccessToken = await JSON.parse(accessTokenResponse).content.accessToken;
+    let myUserIdHash = await JSON.parse(userStatusResponse).content.userIdHash;
+
+    const serverId = Math.floor(Math.random()*5+1);
+    const ws = new WebSocket(`wss://kr-ss${serverId}.chat.naver.com/chat`);
+
+    ws.onopen = () => {
+        sendConsole(`Connected to server ${serverId}`, 1);
+        driver.quit();
+        const data = JSON.stringify({
+            ver: "2",
+            cmd: 100,
+            svcid: "game",
+            cid: chatChannelId,
+            bdy: {
+                uid: myUserIdHash,
+                devType: 2001,
+                accTkn: myAccessToken,
+                auth: "SEND",
+            },
+            tid: 1
+        })
+        ws.send(data);
+    }
+
+    ws.onclose = function onClose() {
+        sendConsole('Disconnected from server', 2);
+        switch (config.reconnect) {
+            case -1:
+                resolve;
+                break;
+            case 0:
+                connectWebSocket();
+                break;
+            default:
+                reconnectCount += 1;
+                if (reconnectCount <= config.reconnect){
+                    sendConsole(`Reconnecting to server... (${reconnectCount} ${reconnectCount == 1 ? 'time' : 'times'})`, 1);
+                    connectWebSocket();
+                }
+                break;
+        }
+    };
+
+    ws.onmessage = function onMessage(data) {
+        handleMessage(data.data);
+    };
 }
 
 runBot();
