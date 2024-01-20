@@ -303,7 +303,7 @@ async function injectScriptLoop(url) {
     currentUrl = await driver.getCurrentUrl();
     if (currentUrl === url && shouldInject) {
         shouldInject = false;
-        const webSocketListener = await fs.readFile('./modules/scripts/webSocketListener.js', 'utf-8');
+        const webSocketListener = await fs.readFile('./modules/webSocketListener.js', 'utf-8');
         await driver.executeScript(webSocketListener);
         try {
             NID_AUT = await driver.manage().getCookie('NID_AUT');
