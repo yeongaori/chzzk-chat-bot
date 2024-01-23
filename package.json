@@ -1,6 +1,6 @@
 {
   "name": "chzzk-chat-bot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Chat Bot for CHZZK streaming service",
   "main": "index.js",
   "scripts": {
@@ -22,6 +22,7 @@
   },
   "homepage": "https://github.com/yeongaori/chzzk-chat-bot#readme",
   "dependencies": {
+    "isomorphic-ws": "^5.0.0",
     "selenium-webdriver": "^4.16.0"
   }
 }
