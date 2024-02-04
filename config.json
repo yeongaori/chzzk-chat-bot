@@ -2,5 +2,6 @@
   "url": "https://chzzk.naver.com/live/channelId",
   "commandCooldown": 3000,
   "reconect": 0,
-  "saveLog": true
+  "saveLog": true,
+  "uptimeText": "%hours% hours %minutes% minutes %seconds% seconds"
 }
