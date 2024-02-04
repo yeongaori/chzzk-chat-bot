@@ -21,6 +21,7 @@ let isLoggedIn = false;
 let shouldGetCookie = true;
 let NID_AUT = "";
 let NID_SES = "";
+let userNickname = "";
 let ws;
 let reconnectCount = 0;
 
@@ -180,7 +181,7 @@ async function handleMessage(data) {
 
                 cooldowns.set(commandKey, Date.now());
 
-                if (message.startsWith(commandsDataItem.command) && msgTypeCode == commandsDataItem.msgTypeCode) {
+                if (message.startsWith(commandsDataItem.command) && msgTypeCode == commandsDataItem.msgTypeCode && nickname != userNickname) {
                     let replyMessage = commandsDataItem.reply;
                     //replyMessage = "nickname: [nickname] / channelName: [channelName] / message: [message] / title: [title] / uptime: [uptime] / concurrentUserCount: [concurrentUserCount] / accumulateCount: [accumulateCount] / categoryType: [categoryType] / liveCategory: [liveCategory] / liveCategoryValue: [liveCategoryValue] / chatActive: [chatActive] / chatAvailableGroup: [chatAvailableGroup] / paidPromotion: [paidPromotion] / followDate: [followDate]\n";
 
@@ -394,6 +395,7 @@ async function connectWebSocket() {
         fetchApi(`https://comm-api.game.naver.com/nng_main/v1/chats/access-token?channelId=${chatChannelId}&chatType=STREAMING`),
         fetchApi(`https://comm-api.game.naver.com/nng_main/v1/user/getUserStatus`)
     ]);
+    userNickname = await JSON.parse(userStatusResponse).content.nickname;
     let accessToken = await JSON.parse(accessTokenResponse).content.accessToken;
     let myUserIdHash = await JSON.parse(userStatusResponse).content.userIdHash;
 
