@@ -226,12 +226,17 @@ async function handleMessage(data) {
         sendConsole(`Error: ${e.message}`, 3);
     }
 
-
     function calculateUptime(livePlaybackJson) {
         try {
-            const startTimestamp = JSON.parse(livePlaybackJson).live.start;
-            const uptime = getTimeDifference(startTimestamp);
-            return uptime;
+            const parsedJson = JSON.parse(livePlaybackJson);
+
+            if (parsedJson.live && parsedJson.live.start && parsedJson.live.status == 'STARTED') {
+                const startTimestamp = parsedJson.live.start;
+                const uptime = getTimeDifference(startTimestamp);
+                return uptime;
+            } else if (parsedJson.live.status == 'ENDED') {
+                return 'OFFLINE';
+            }
         } catch (e) {
             sendConsole(`Error handling API [uptime]: ${e}`, 3);
             return '';
@@ -368,7 +373,15 @@ function getTimeDifference(timestamp) {
     const minutes = Math.floor((timeDifference % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((timeDifference % (1000 * 60)) / 1000);
 
-    const formattedTime = `${hours} hours ${minutes} minutes ${seconds} seconds`;
+    let formattedTime = `${hours} hours ${minutes} minutes ${seconds} seconds`;
+    const uptimeText = config.uptimeText;
+    try {
+        formattedTime = uptimeText.replace("%hours%", hours);
+        formattedTime = formattedTime.replace("%minutes%", minutes);
+        formattedTime = formattedTime.replace("%seconds%", seconds);
+    } catch (e) {
+        sendConsole(`Error fetching uptimeText from config: ${e}`, 3);
+    }
 
     return formattedTime;
 }
