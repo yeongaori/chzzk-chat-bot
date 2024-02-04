@@ -179,7 +179,7 @@ async function handleMessage(data) {
 
                 cooldowns.set(commandKey, Date.now());
 
-                if (message.startsWith(commandsDataItem.command) && msgTypeCode === commandsDataItem.msgTypeCode) {
+                if (message.startsWith(commandsDataItem.command) && msgTypeCode == commandsDataItem.msgTypeCode) {
                     let replyMessage = commandsDataItem.reply;
                     //replyMessage = "nickname: [nickname] / channelName: [channelName] / message: [message] / title: [title] / uptime: [uptime] / concurrentUserCount: [concurrentUserCount] / accumulateCount: [accumulateCount] / categoryType: [categoryType] / liveCategory: [liveCategory] / liveCategoryValue: [liveCategoryValue] / chatActive: [chatActive] / chatAvailableGroup: [chatAvailableGroup] / paidPromotion: [paidPromotion] / followDate: [followDate]\n";
 
