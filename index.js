@@ -10,6 +10,7 @@ process.title = 'CHZZK ChatBot';
 
 let driver;
 let config = {};
+let isConnected = false;
 let url = "";
 let channelId = "";
 let sid = "";
@@ -388,6 +389,8 @@ async function connectWebSocket() {
 
     ws.onopen = () => {
         sendConsole(`Connected to server ${serverId}`, 1);
+        isConnected = true;
+        startPingTimer();
         driver.quit();
         const data = JSON.stringify({
             ver: "2",
@@ -407,6 +410,7 @@ async function connectWebSocket() {
 
     ws.onclose = function onClose() {
         sendConsole('Disconnected from server', 2);
+        isConnected = false;
         switch (config.reconnect) {
             case -1:
                 resolve;
@@ -427,6 +431,26 @@ async function connectWebSocket() {
     ws.onmessage = function onMessage(data) {
         handleMessage(data.data);
     };
+}
+
+async function startPingTimer() {
+    for (;;) {
+        if (!isConnected) {
+            break;
+        }
+        await pingTimer();
+        await new Promise(resolve => setTimeout(resolve, 20000));
+    }
+}
+
+async function pingTimer() {
+    if (isConnected){
+        const data = JSON.stringify({
+            ver: "2",
+            cmd: 10000
+        })
+        ws.send(data);
+    }
 }
 
 runBot();
