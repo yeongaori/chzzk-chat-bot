@@ -27,7 +27,7 @@ let reconnectCount = 0;
 
 async function loadConfig() {
     try {
-        sendConsole('Reading config file...', 1);
+        sendConsole('Reading config file...', 0);
         const data = await fs.readFile('config.json', 'utf8');
         config = JSON.parse(data);
     } catch (e) {
@@ -76,7 +76,7 @@ async function runBot() {
 
         channelId = url.split('chzzk.naver.com/live/')[1]?.split('/')[0];
         if (channelId) {
-            sendConsole('Found channel Id: ' + channelId, 1);
+            //sendConsole('Found channel Id: ' + channelId, 1);
         } else {
             sendConsole('Error getting channelId, wrong URL?', 3);
         }
@@ -100,7 +100,6 @@ async function checkLoginStatus() {
     }
 
     if (isLoggedIn) {
-        sendConsole('User logged in', 1);
         connectWebSocket();
         return;
     } else {
@@ -399,11 +398,12 @@ async function connectWebSocket() {
     let accessToken = await JSON.parse(accessTokenResponse).content.accessToken;
     let myUserIdHash = await JSON.parse(userStatusResponse).content.userIdHash;
 
+    sendConsole(`User logged in to ${userNickname}`, 1);
+
     const serverId = Math.floor(Math.random()*5+1);
     ws = new WebSocket(`wss://kr-ss${serverId}.chat.naver.com/chat`);
 
-    ws.onopen = () => {
-        sendConsole(`Connected to server ${serverId}`, 1);
+    ws.onopen = async () => {
         isConnected = true;
         startPingTimer();
         driver.quit();
@@ -421,6 +421,9 @@ async function connectWebSocket() {
             tid: 1
         })
         ws.send(data);
+        const liveDetailResponse = await fetchApi(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/live-detail`);
+        const channelName = JSON.parse(liveDetailResponse).content.channel.channelName;
+        sendConsole(`Connected to server ${serverId} (${channelName})`, 1);
     }
 
     ws.onclose = function onClose() {
