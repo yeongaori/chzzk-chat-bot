@@ -1,6 +1,6 @@
 # CHZZK Chat Bot
 
-Simple chat bot software running on the Selenium web driver for the CHZZK streaming service
+Simple chat bot software running on the isomorphic-ws (and Selenium web driver to log-in) for the CHZZK streaming service
 
 ## Prerequisites
 Make sure you have the following installed before proceeding:
