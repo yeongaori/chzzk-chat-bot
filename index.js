@@ -1,10 +1,9 @@
 const {Builder, By, Key, until, promise} = require('selenium-webdriver');
 const chrome = require('selenium-webdriver/chrome');
-const WebSocket = require('isomorphic-ws');
+const webSocket = require('isomorphic-ws');
 const fs = require('fs').promises;
 const https = require('https');
-const { readSync } = require('fs');
-const { profile } = require('console');
+const logger = require('./modules/colorfulLogger');
 
 process.title = 'CHZZK ChatBot';
 
@@ -27,11 +26,11 @@ let reconnectCount = 0;
 
 async function loadConfig() {
     try {
-        sendConsole('Reading config file...', 0);
+        logger.info('Reading config file...');
         const data = await fs.readFile('config.json', 'utf8');
         config = JSON.parse(data);
     } catch (e) {
-        sendConsole('Error reading config file: ' + e, 3);
+        logger.error('Error reading config file: ' + e);
         config = {};
     }
 }
@@ -41,14 +40,15 @@ async function loadCommands() {
         const data = await fs.readFile('commands.json', 'utf8');
         commandsData = JSON.parse(data);
         for (const commandData of commandsData) {
-            await sendConsole(`Command ${commandData.command} has been loaded!`, 0);
+            await logger.info(`Command ${commandData.command} has been loaded!`);
         }
     } catch (e) {
-        sendConsole('Error reading commands file: ' + e, 3);
+        logger.error('Error reading commands file: ' + e);
     }
 }
 
 async function runBot() {
+    logger.term('Type "help" for command list.');
     try {
         await loadConfig();
         await loadCommands();
@@ -76,13 +76,13 @@ async function runBot() {
 
         channelId = url.split('chzzk.naver.com/live/')[1]?.split('/')[0];
         if (channelId) {
-            //sendConsole('Found channel Id: ' + channelId, 1);
+            //logger.info('Found channel Id: ' + channelId);
         } else {
-            sendConsole('Error getting channelId, wrong URL?', 3);
+            logger.error('Error getting channelId, wrong URL?');
         }
         await checkLoginStatus();
     } catch (e) {
-        sendConsole(e, 3);
+        logger.error(e);
     }
 }
 
@@ -104,44 +104,17 @@ async function checkLoginStatus() {
         return;
     } else {
         if (currentUrl == url) {
-            sendConsole('User not logged in, please log in', 2);
+            logger.warn('User not logged in, please log in');
             currentUrl = 'https://nid.naver.com/nidlogin.login?url=' + url;
             await driver.get('https://nid.naver.com/nidlogin.login?url=' + url);
         }
-        //sendConsole('Waiting 5 seconds for website to load', 0);
+        //logger.info('Waiting 5 seconds for website to load');
         await driver.sleep(500);
         checkLoginStatus();
     }
 }
 
-/**
- * 
- * @param {string} text Text to print in console
- * @param {number|string} type 0: Normal client message, 1: Green client message, 2: Warning message, 3: Error message, String for custom message type
- */
-async function sendConsole(text, type) {
-    if (type == 0) {
-        text = `\x1b[0m[Client] ${text}`;
-    }
-    else if (type == 1) {
-        text = `\x1b[32m[Client] ${text}\x1b[0m`;
-    }
-    else if (type == 2) {
-        text = `\x1b[33m[WARNING] ${text}\x1b[0m`;
-    }
-    else if (type == 3) {
-        text = `\x1b[31m[Error] ${text}\x1b[0m`;
-    }
-    else if (typeof type == 'string') {
-        text = `\x1b[0m[${type}] ${text}`;
-    }
-    else {
-        text = `\x1b[35m[sendConsole] Unknown sendConsole type\x1b[0m`;
-    }
-    console.log(text);
-}
-
-async function handleMessage(data) {
+async function onMessageReceiveEvent(data) {
     try {
         data = JSON.parse(data);
         if (data.cmd == 93101) {
@@ -156,7 +129,7 @@ async function handleMessage(data) {
 
             // Log message details
             // console.log(data);
-            // sendConsole(`${nickname} (${msgTypeCode}), ${message}`, 'Message');
+            //logger.debug(`${nickname} (${msgTypeCode}), ${message}`, 'Message');
 
             if (config.saveLog) {
                 saveLog(`MESSAGE / ${msgTypeCode} / ${nickname} / ${message}`);
@@ -195,24 +168,27 @@ async function handleMessage(data) {
                         fetchApi(`https://comm-api.game.naver.com/nng_main/v1/chats/${chatChannelId}/users/${userId}/profile-card?chatType=STREAMING`)
                     ]);
 
-                    replyMessage = replyMessage.replace("[nickname]", nickname);
-                    replyMessage = replyMessage.replace("[channelName]", JSON.parse(channelProfileCardResponse).content.nickname);
-                    replyMessage = replyMessage.replace("[message]", message);
-                    replyMessage = replyMessage.replace("[title]", JSON.parse(liveStatusResponse).content.liveTitle);
-                    replyMessage = replyMessage.replace("[uptime]", calculateUptime(JSON.parse(liveDetailResponse).content.livePlaybackJson));
-                    replyMessage = replyMessage.replace("[concurrentUserCount]", JSON.parse(liveStatusResponse).content.concurrentUserCount);
-                    replyMessage = replyMessage.replace("[accumulateCount]", JSON.parse(liveStatusResponse).content.accumulateCount);
-                    replyMessage = replyMessage.replace("[categoryType]", JSON.parse(liveStatusResponse).content.categoryType);
-                    replyMessage = replyMessage.replace("[liveCategory]", JSON.parse(liveStatusResponse).content.liveCategory);
-                    replyMessage = replyMessage.replace("[liveCategoryValue]", JSON.parse(liveStatusResponse).content.liveCategoryValue);
-                    replyMessage = replyMessage.replace("[chatActive]", JSON.parse(liveDetailResponse).content.chatActive);
-                    replyMessage = replyMessage.replace("[chatAvailableGroup]", JSON.parse(liveDetailResponse).content.chatAvailableGroup);
-                    replyMessage = replyMessage.replace("[paidPromotion]", JSON.parse(liveDetailResponse).content.paidPromotion);
-                    replyMessage = replyMessage.replace("[followDate]", getFollowDate(userProfileCardResponse));
+                    const replacePlaceholders = (str) => {
+                        return str.replace(/\[nickname\]/g, nickname)
+                                  .replace(/\[channelName\]/g, JSON.parse(channelProfileCardResponse).content.nickname)
+                                  .replace(/\[message\]/g, message)
+                                  .replace(/\[title\]/g, JSON.parse(liveStatusResponse).content.liveTitle)
+                                  .replace(/\[uptime\]/g, calculateUptime(JSON.parse(liveDetailResponse).content.livePlaybackJson))
+                                  .replace(/\[concurrentUserCount\]/g, JSON.parse(liveStatusResponse).content.concurrentUserCount)
+                                  .replace(/\[accumulateCount\]/g, JSON.parse(liveStatusResponse).content.accumulateCount)
+                                  .replace(/\[categoryType\]/g, JSON.parse(liveStatusResponse).content.categoryType)
+                                  .replace(/\[liveCategory\]/g, JSON.parse(liveStatusResponse).content.liveCategory)
+                                  .replace(/\[liveCategoryValue\]/g, JSON.parse(liveStatusResponse).content.liveCategoryValue)
+                                  .replace(/\[chatActive\]/g, JSON.parse(liveDetailResponse).content.chatActive)
+                                  .replace(/\[chatAvailableGroup\]/g, JSON.parse(liveDetailResponse).content.chatAvailableGroup)
+                                  .replace(/\[paidPromotion\]/g, JSON.parse(liveDetailResponse).content.paidPromotion)
+                                  .replace(/\[followDate\]/g, getFollowDate(userProfileCardResponse));
+                    };
 
-                    // Send the modified replyMessage
+                    replyMessage = replacePlaceholders(replyMessage);
+
                     await sendMessage(replyMessage);
-                    //sendConsole(replyMessage, 'Reply');
+                    //logger.debug(replyMessage, 'Reply');
 
                     if (config.saveLog) {
                         saveLog(`COMMAND / ${commandsDataItem.command} / ${commandsDataItem.reply}`);
@@ -223,7 +199,7 @@ async function handleMessage(data) {
             sid = data.bdy.sid;
         }
     } catch (e) {
-        sendConsole(`Error: ${e.message}`, 3);
+        logger.error(`Error: ${e.message}`);
     }
 
     function calculateUptime(livePlaybackJson) {
@@ -238,7 +214,7 @@ async function handleMessage(data) {
                 return 'OFFLINE';
             }
         } catch (e) {
-            sendConsole(`Error handling API [uptime]: ${e}`, 3);
+            logger.error(`Error handling API [uptime]: ${e}`);
             return '';
         }
     }
@@ -249,7 +225,7 @@ async function handleMessage(data) {
             const followDate = streamingProperty.following ? streamingProperty.following.followDate : "not following";
             return followDate;
         } catch (e) {
-            sendConsole("Error handling API [followDate]: " + e, 3);
+            logger.error("Error handling API [followDate]: " + e);
             return '';
         }
     }
@@ -283,7 +259,7 @@ async function sendMessage(message) {
         })
         ws.send(data);
     } else {
-        sendConsole("User should be logged in to send message", 3)
+        logger.warn("User should be logged in to send message")
     }
 }
 
@@ -304,7 +280,7 @@ async function saveLog(data) {
     let text = `${formattedDate} / ${data}\n`;
     fs.appendFile(fileName, text, (e) => {
         if (e) {
-            sendConsole(e, 3);
+            logger.error(e);
         }
     });
 }
@@ -320,13 +296,13 @@ async function getAuthCookie() {
             NID_AUT = await driver.manage().getCookie('NID_AUT');
             NID_AUT = NID_AUT.value;
         } catch (e) {
-            sendConsole(`Failed to get NID_AUT cookie: ${e.message.split('\n')[0]}`, 2)
+            logger.error(`Failed to get NID_AUT cookie: ${e.message.split('\n')[0]}`);
         }
         try {
             NID_SES = await driver.manage().getCookie('NID_SES');
             NID_SES = NID_SES.value;
         } catch (e) {
-            sendConsole(`Failed to get NID_SES cookie: ${e.message.split('\n')[0]}`, 2)
+            logger.error(`Failed to get NID_SES cookie: ${e.message.split('\n')[0]}`);
         }
     } else {
         await driver.sleep(100);
@@ -380,7 +356,7 @@ function getTimeDifference(timestamp) {
         formattedTime = formattedTime.replace("%minutes%", minutes);
         formattedTime = formattedTime.replace("%seconds%", seconds);
     } catch (e) {
-        sendConsole(`Error fetching uptimeText from config: ${e}`, 3);
+        logger.error(`Error fetching uptimeText from config: ${e}`);
     }
 
     return formattedTime;
@@ -398,10 +374,10 @@ async function connectWebSocket() {
     let accessToken = await JSON.parse(accessTokenResponse).content.accessToken;
     let myUserIdHash = await JSON.parse(userStatusResponse).content.userIdHash;
 
-    sendConsole(`User logged in to ${userNickname}`, 1);
+    logger.info(`User logged in to ${userNickname}`);
 
     const serverId = Math.floor(Math.random()*5+1);
-    ws = new WebSocket(`wss://kr-ss${serverId}.chat.naver.com/chat`);
+    ws = new webSocket(`wss://kr-ss${serverId}.chat.naver.com/chat`);
 
     ws.onopen = async () => {
         isConnected = true;
@@ -423,11 +399,11 @@ async function connectWebSocket() {
         ws.send(data);
         const liveDetailResponse = await fetchApi(`https://api.chzzk.naver.com/service/v1/channels/${channelId}/live-detail`);
         const channelName = JSON.parse(liveDetailResponse).content.channel.channelName;
-        sendConsole(`Connected to server ${serverId} (${channelName})`, 1);
+        logger.info(`Connected to server ${serverId} (${channelName})`);
     }
 
     ws.onclose = function onClose() {
-        sendConsole('Disconnected from server', 2);
+        logger.warn('Disconnected from server');
         isConnected = false;
         switch (config.reconnect) {
             case -1:
@@ -439,7 +415,7 @@ async function connectWebSocket() {
             default:
                 reconnectCount += 1;
                 if (reconnectCount <= config.reconnect){
-                    sendConsole(`Reconnecting to server... (${reconnectCount} ${reconnectCount == 1 ? 'time' : 'times'})`, 1);
+                    logger.info(`Reconnecting to server... (${reconnectCount} ${reconnectCount == 1 ? 'time' : 'times'})`);
                     connectWebSocket();
                 }
                 break;
@@ -447,7 +423,7 @@ async function connectWebSocket() {
     };
 
     ws.onmessage = function onMessage(data) {
-        handleMessage(data.data);
+        onMessageReceiveEvent(data.data);
     };
 }
 
